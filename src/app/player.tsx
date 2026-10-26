@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,10 @@ import {
   Dimensions,
   ScrollView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, {
@@ -18,17 +18,23 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-  interpolate,
-  Extrapolate,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../theme/ThemeContext';
-import { usePlaybackStore } from '../services/audio/playbackStore';
+import { useAudio } from '../hooks/useAudio';
 import { useLibraryStore } from '../services/libraryStore';
 import { useTranslation } from 'react-i18next';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ARTWORK_SIZE = Math.min(SCREEN_WIDTH - 64, 320);
+
+function formatMs(ms: number): string {
+  const s   = Math.floor(ms / 1000);
+  const min = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
 
 export default function PlayerScreen() {
   const { theme }  = useTheme();
@@ -38,29 +44,56 @@ export default function PlayerScreen() {
 
   const {
     currentTrack, status, positionMs, durationMs,
-    isShuffled, repeatMode,
-    toggleShuffle, setRepeatMode,
-  } = usePlaybackStore();
+    isShuffled, repeatMode, isPlaying, isLoading, errorMessage,
+    togglePlayPause, skipToNext, skipToPrevious,
+    seekTo, toggleShuffle, cycleRepeat,
+  } = useAudio();
 
   const { isLiked, likeTrack, unlikeTrack } = useLibraryStore();
 
-  const isPlaying  = status === 'playing';
-  const isLoading  = status === 'loading';
-  const progress   = durationMs > 0 ? positionMs / durationMs : 0;
-  const liked      = currentTrack ? isLiked(currentTrack.id) : false;
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubPosition, setScrubPosition] = useState(0);
 
-  const handleLike = useCallback(() => {
+  const progressBarRef = useRef<View>(null);
+  const progress = durationMs > 0
+    ? (isScrubbing ? scrubPosition : positionMs) / durationMs
+    : 0;
+
+  const liked = currentTrack ? isLiked(currentTrack.id) : false;
+
+  const handleLike = useCallback(async () => {
     if (!currentTrack) return;
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (liked) unlikeTrack(currentTrack.id);
     else        likeTrack(currentTrack);
   }, [currentTrack, liked, likeTrack, unlikeTrack]);
 
-  const cycleRepeat = useCallback(() => {
-    if (repeatMode === 'off') setRepeatMode('all');
-    else if (repeatMode === 'all') setRepeatMode('one');
-    else setRepeatMode('off');
-  }, [repeatMode, setRepeatMode]);
+  const handlePlayPause = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await togglePlayPause();
+  }, [togglePlayPause]);
 
+  const handleNext = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await skipToNext();
+  }, [skipToNext]);
+
+  const handlePrev = useCallback(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await skipToPrevious();
+  }, [skipToPrevious]);
+
+  // Artwork scale animation when playing/paused
+  const artworkScale = useSharedValue(isPlaying ? 1 : 0.88);
+  React.useEffect(() => {
+    artworkScale.value = withSpring(isPlaying ? 1 : 0.88, { damping: 14, stiffness: 120 });
+  }, [isPlaying, artworkScale]);
+
+  const artworkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: artworkScale.value }],
+  }));
+
+  // Play button
   const playBtnScale = useSharedValue(1);
   const playBtnStyle = useAnimatedStyle(() => ({
     transform: [{ scale: playBtnScale.value }],
@@ -69,7 +102,7 @@ export default function PlayerScreen() {
   if (!currentTrack) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: theme.colors.bg }]}>
-        <Text style={{ fontSize: 40, marginBottom: 12 }}>🎵</Text>
+        <Text style={{ fontSize: 44, marginBottom: 12 }}>🎵</Text>
         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
           {t('player.noTrackLoaded')}
         </Text>
@@ -86,79 +119,73 @@ export default function PlayerScreen() {
   const artworkUri = currentTrack.artworkUrl;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.playerBg }]}>
-      {/* Dynamic blurred background from artwork */}
+    <View style={styles.container}>
+      {/* Dynamic blurred artwork background */}
       {artworkUri && (
         <>
           <Image
             source={{ uri: artworkUri }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
-            blurRadius={Platform.OS === 'ios' ? 40 : 20}
+            blurRadius={Platform.OS === 'ios' ? 50 : 22}
           />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.60)' }]} />
         </>
       )}
+      {!artworkUri && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.playerBg }]} />
+      )}
 
-      {/* Bottom gradient for readability */}
+      {/* Bottom gradient */}
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.85)']}
-        style={[StyleSheet.absoluteFill, { top: SCREEN_HEIGHT * 0.35 }]}
+        colors={['transparent', 'rgba(0,0,0,0.90)']}
+        style={[StyleSheet.absoluteFill, { top: '30%' }]}
         pointerEvents="none"
       />
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 },
-        ]}
-        scrollEnabled={false}
-      >
-        {/* Header bar */}
+      <View style={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
+
+        {/* Header */}
         <View style={[styles.headerBar, { paddingHorizontal: 20 }]}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => router.back()} hitSlop={14}>
             <Ionicons name="chevron-down" size={28} color="rgba(255,255,255,0.85)" />
           </Pressable>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={styles.headerLabel}>{t('player.nowPlaying')}</Text>
-            <Text style={styles.providerBadge}>{currentTrack.providerName}</Text>
+            <Text style={styles.providerBadge}>
+              {currentTrack.providerName}
+              {currentTrack.licenseInfo && ` · ${currentTrack.licenseInfo.name}`}
+            </Text>
           </View>
-          <Pressable hitSlop={12}>
+          <Pressable hitSlop={14}>
             <Ionicons name="ellipsis-horizontal" size={22} color="rgba(255,255,255,0.85)" />
           </Pressable>
         </View>
 
-        {/* Artwork */}
-        <View style={[styles.artworkContainer, { marginTop: 24 }]}>
-          <Animated.View
-            style={[
-              styles.artworkShadow,
-              {
-                shadowColor: theme.colors.accent,
-                shadowRadius: isPlaying ? 32 : 16,
-                shadowOpacity: isPlaying ? 0.5 : 0.25,
-              },
-            ]}
-          >
-            <View style={[styles.artwork, { borderRadius: theme.radius.xl }]}>
-              {artworkUri ? (
-                <Image
-                  source={{ uri: artworkUri }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.bgTertiary, justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ fontSize: 72 }}>🎵</Text>
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        </View>
+        {/* Artwork — scales with play state */}
+        <Animated.View style={[styles.artworkContainer, artworkStyle]}>
+          <View style={[styles.artwork, { borderRadius: theme.radius.xl }, theme.shadow.lg]}>
+            {artworkUri ? (
+              <Image
+                source={{ uri: artworkUri }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={300}
+              />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, {
+                backgroundColor: theme.colors.bgTertiary,
+                justifyContent: 'center', alignItems: 'center',
+              }]}>
+                <Text style={{ fontSize: 80 }}>🎵</Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
 
         {/* Track info + like */}
-        <View style={[styles.infoRow, { paddingHorizontal: 32, marginTop: 32 }]}>
-          <View style={{ flex: 1, marginRight: 12 }}>
+        <View style={[styles.infoRow, { paddingHorizontal: 32, marginTop: 28 }]}>
+          <View style={{ flex: 1, marginRight: 16 }}>
             <Text numberOfLines={1} style={styles.trackTitle}>
               {currentTrack.title}
             </Text>
@@ -169,138 +196,185 @@ export default function PlayerScreen() {
               </Text>
             )}
           </View>
-          <Pressable onPress={handleLike} hitSlop={8}>
-            <Ionicons
-              name={liked ? 'heart' : 'heart-outline'}
-              size={26}
-              color={liked ? '#FF4B6E' : 'rgba(255,255,255,0.65)'}
-            />
-          </Pressable>
+          <Animated.View>
+            <Pressable
+              onPress={handleLike}
+              hitSlop={10}
+              style={styles.likeBtn}
+            >
+              <Ionicons
+                name={liked ? 'heart' : 'heart-outline'}
+                size={28}
+                color={liked ? '#FF4B6E' : 'rgba(255,255,255,0.65)'}
+              />
+            </Pressable>
+          </Animated.View>
         </View>
 
-        {/* Availability notice */}
-        {currentTrack.playbackAvailability !== 'available' && (
-          <View style={[styles.noticeBadge, { marginHorizontal: 32, marginTop: 8 }]}>
-            <Text style={styles.noticeText}>
-              {currentTrack.playbackAvailability === 'external_only'
-                ? '🔗 ' + t('player.openIn', { app: 'YouTube Music' })
-                : '⚠ ' + t('player.audioUnavailable')}
-            </Text>
+        {/* Error state */}
+        {errorMessage && (
+          <View style={[styles.errorBadge, { marginHorizontal: 32, marginTop: 8 }]}>
+            <Text style={styles.errorText}>⚠ {errorMessage}</Text>
           </View>
         )}
 
-        {/* Progress bar */}
+        {/* Unavailable notice */}
+        {currentTrack.playbackAvailability === 'unavailable' && !errorMessage && (
+          <View style={[styles.noticeBadge, { marginHorizontal: 32, marginTop: 8 }]}>
+            <Text style={styles.noticeText}>{t('player.audioUnavailable')}</Text>
+          </View>
+        )}
+
+        {/* Progress / seek bar */}
         <View style={[styles.progressSection, { paddingHorizontal: 32, marginTop: 20 }]}>
-          <View style={[styles.progressBg, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+          {/* Track - tappable */}
+          <View
+            ref={progressBarRef}
+            style={[styles.progressBg, { backgroundColor: 'rgba(255,255,255,0.22)' }]}
+            onStartShouldSetResponder={() => durationMs > 0}
+            onResponderGrant={(e) => {
+              setIsScrubbing(true);
+              const x = e.nativeEvent.locationX;
+              const barWidth = SCREEN_WIDTH - 64;
+              const pct = Math.max(0, Math.min(1, x / barWidth));
+              setScrubPosition(pct * durationMs);
+            }}
+            onResponderMove={(e) => {
+              const x = e.nativeEvent.locationX;
+              const barWidth = SCREEN_WIDTH - 64;
+              const pct = Math.max(0, Math.min(1, x / barWidth));
+              setScrubPosition(pct * durationMs);
+            }}
+            onResponderRelease={async () => {
+              setIsScrubbing(false);
+              await seekTo(scrubPosition);
+            }}
+          >
             <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${progress * 100}%`,
-                  backgroundColor: '#fff',
-                },
-              ]}
+              style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: '#fff' }]}
             />
-            {/* Scrubber dot */}
+            {/* Scrubber handle */}
             <View
-              style={[
-                styles.scrubDot,
-                { left: `${progress * 100}%`, backgroundColor: '#fff' },
-              ]}
+              style={[styles.scrubHandle, {
+                left: `${progress * 100}%`,
+                backgroundColor: '#fff',
+                transform: [{ scale: isScrubbing ? 1.4 : 1 }],
+              }]}
             />
           </View>
+
+          {/* Time */}
           <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatMs(positionMs)}</Text>
+            <Text style={styles.timeText}>{formatMs(isScrubbing ? scrubPosition : positionMs)}</Text>
             <Text style={styles.timeText}>{formatMs(durationMs)}</Text>
           </View>
         </View>
 
-        {/* Controls */}
-        <View style={[styles.controls, { paddingHorizontal: 20, marginTop: 16 }]}>
+        {/* Main controls */}
+        <View style={[styles.controls, { paddingHorizontal: 24, marginTop: 12 }]}>
           {/* Shuffle */}
-          <Pressable onPress={toggleShuffle} hitSlop={10}>
-            <Ionicons
-              name="shuffle"
-              size={22}
-              color={isShuffled ? theme.colors.accent : 'rgba(255,255,255,0.55)'}
-            />
-          </Pressable>
+          <ControlIcon
+            onPress={() => { Haptics.selectionAsync(); toggleShuffle(); }}
+            active={isShuffled}
+            activeColor={theme.colors.accent}
+          >
+            <Ionicons name="shuffle" size={22}
+              color={isShuffled ? theme.colors.accent : 'rgba(255,255,255,0.55)'} />
+          </ControlIcon>
 
-          {/* Prev */}
-          <ControlBtn
-            icon="play-skip-back"
-            size={28}
-            onPress={() => {/* Phase 3 */}}
-          />
+          {/* Previous */}
+          <ControlIcon onPress={handlePrev}>
+            <Ionicons name="play-skip-back" size={30} color="rgba(255,255,255,0.9)" />
+          </ControlIcon>
 
-          {/* Play/Pause */}
+          {/* Play / Pause */}
           <Animated.View style={playBtnStyle}>
             <Pressable
-              onPress={() => {/* Phase 3 */}}
-              onPressIn={() => { playBtnScale.value = withSpring(0.92, { damping: 10 }); }}
+              onPress={handlePlayPause}
+              onPressIn={() => { playBtnScale.value = withSpring(0.90, { damping: 8 }); }}
               onPressOut={() => { playBtnScale.value = withSpring(1, { damping: 10 }); }}
               style={[styles.playBtn, { backgroundColor: '#fff' }]}
               accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
             >
-              <Ionicons
-                name={isLoading ? 'hourglass-outline' : isPlaying ? 'pause' : 'play'}
-                size={30}
-                color={theme.isDark ? theme.colors.playerBg : '#1A0458'}
-              />
+              {isLoading ? (
+                <ActivityIndicator size="large" color={theme.colors.playerBg} />
+              ) : (
+                <Ionicons
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={32}
+                  color={theme.isDark ? '#100D1E' : '#1A0458'}
+                  style={!isPlaying ? { marginLeft: 3 } : undefined}
+                />
+              )}
             </Pressable>
           </Animated.View>
 
           {/* Next */}
-          <ControlBtn
-            icon="play-skip-forward"
-            size={28}
-            onPress={() => {/* Phase 3 */}}
-          />
+          <ControlIcon onPress={handleNext}>
+            <Ionicons name="play-skip-forward" size={30} color="rgba(255,255,255,0.9)" />
+          </ControlIcon>
 
           {/* Repeat */}
-          <Pressable onPress={cycleRepeat} hitSlop={10}>
-            <Ionicons
-              name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'}
-              size={22}
-              color={repeatMode !== 'off' ? theme.colors.accent : 'rgba(255,255,255,0.55)'}
-            />
+          <View style={{ position: 'relative' }}>
+            <ControlIcon
+              onPress={() => { Haptics.selectionAsync(); cycleRepeat(); }}
+              active={repeatMode !== 'off'}
+              activeColor={theme.colors.accent}
+            >
+              <Ionicons
+                name="repeat"
+                size={22}
+                color={repeatMode !== 'off' ? theme.colors.accent : 'rgba(255,255,255,0.55)'}
+              />
+            </ControlIcon>
             {repeatMode === 'one' && (
-              <View style={styles.repeatOneBadge}>
+              <View style={styles.repeatOneDot}>
                 <Text style={styles.repeatOneText}>1</Text>
               </View>
             )}
+          </View>
+        </View>
+
+        {/* Secondary row: queue button + add to playlist */}
+        <View style={[styles.secondaryRow, { paddingHorizontal: 32, marginTop: 20 }]}>
+          <Pressable onPress={() => router.push('/queue')} style={styles.secondaryBtn} hitSlop={8}>
+            <Ionicons name="list" size={20} color="rgba(255,255,255,0.55)" />
+            <Text style={styles.secondaryLabel}>{t('player.queue')}</Text>
+          </Pressable>
+
+          <View style={[styles.separatorDot, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+
+          <Pressable style={styles.secondaryBtn} hitSlop={8}>
+            <Ionicons name="add-circle-outline" size={20} color="rgba(255,255,255,0.55)" />
+            <Text style={styles.secondaryLabel}>{t('player.addToPlaylist')}</Text>
           </Pressable>
         </View>
 
-        {/* License attribution */}
+        {/* CC attribution — required for CC-BY tracks */}
         {currentTrack.licenseInfo?.requiresAttribution && (
-          <View style={[styles.attribution, { marginHorizontal: 32, marginTop: 20 }]}>
+          <View style={[styles.attribution, { marginHorizontal: 32, marginTop: 16 }]}>
             <Text style={styles.attributionText}>
-              "{currentTrack.title}" by {artistText} · {currentTrack.licenseInfo.name}
+              "{currentTrack.title}" by {artistText}
+            </Text>
+            <Text style={styles.attributionLicense}>
+              {currentTrack.licenseInfo.name}
+              {currentTrack.externalUrl ? ' · jamendo.com' : ''}
             </Text>
           </View>
         )}
-
-        {/* Audio unavailable for Phase 3 notice */}
-        {currentTrack.playbackAvailability === 'available' && (
-          <View style={[styles.phase3Notice, { marginHorizontal: 32, marginTop: 12 }]}>
-            <Text style={styles.phase3Text}>
-              🔧 Audio engine coming in Phase 3.{'\n'}
-              Stream URL ready: {currentTrack.streamUrl ? '✅' : '❌'}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
-function ControlBtn({
-  icon, size, onPress,
+// ---- Helper components ----
+function ControlIcon({
+  children, onPress, active = false, activeColor,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  size: number;
+  children: React.ReactNode;
   onPress: () => void;
+  active?: boolean;
+  activeColor?: string;
 }) {
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -308,68 +382,60 @@ function ControlBtn({
     <Animated.View style={style}>
       <Pressable
         onPress={onPress}
-        onPressIn={() => { scale.value = withSpring(0.88); }}
-        onPressOut={() => { scale.value = withSpring(1); }}
-        hitSlop={12}
+        onPressIn={() => { scale.value = withSpring(0.82, { damping: 8 }); }}
+        onPressOut={() => { scale.value = withSpring(1, { damping: 12 }); }}
+        hitSlop={10}
+        style={styles.iconWrap}
       >
-        <Ionicons name={icon} size={size} color="rgba(255,255,255,0.9)" />
+        {children}
       </Pressable>
     </Animated.View>
   );
 }
 
-function formatMs(ms: number): string {
-  const s   = Math.floor(ms / 1000);
-  const min = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${min}:${sec.toString().padStart(2, '0')}`;
-}
-
 const styles = StyleSheet.create({
-  container:    { flex: 1 },
-  emptyContainer:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText:    { fontSize: 16, textAlign: 'center' },
-  content:      { alignItems: 'center' },
-  headerBar:    {
-    flexDirection: 'row', alignItems: 'center',
-    width: '100%', gap: 12,
+  container:       { flex: 1 },
+  emptyContainer:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText:       { fontSize: 16, textAlign: 'center' },
+  content:         { flex: 1 },
+  headerBar:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLabel:     { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+  providerBadge:   { color: 'rgba(255,255,255,0.40)', fontSize: 10, marginTop: 1 },
+  artworkContainer:{ alignItems: 'center', marginTop: 20 },
+  artwork:         { width: ARTWORK_SIZE, height: ARTWORK_SIZE, overflow: 'hidden' },
+  infoRow:         { flexDirection: 'row', alignItems: 'flex-start' },
+  trackTitle:      { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3, marginBottom: 4 },
+  trackArtist:     { color: 'rgba(255,255,255,0.75)', fontSize: 16, fontWeight: '500', marginBottom: 2 },
+  trackAlbum:      { color: 'rgba(255,255,255,0.42)', fontSize: 13 },
+  likeBtn:         { padding: 4 },
+  errorBadge:      { backgroundColor: 'rgba(248,113,113,0.18)', borderRadius: 8, padding: 10 },
+  errorText:       { color: '#F87171', fontSize: 12 },
+  noticeBadge:     { backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 8, padding: 10 },
+  noticeText:      { color: 'rgba(255,255,255,0.65)', fontSize: 12 },
+  progressSection: {},
+  progressBg:      { height: 4, borderRadius: 2, position: 'relative' },
+  progressFill:    { height: 4, borderRadius: 2 },
+  scrubHandle:     {
+    position: 'absolute', top: -6,
+    width: 16, height: 16, borderRadius: 8,
+    marginLeft: -8,
   },
-  headerLabel:  { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
-  providerBadge:{ color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
-  artworkContainer: { alignItems: 'center' },
-  artworkShadow:{ elevation: 16 },
-  artwork:      {
-    width: ARTWORK_SIZE, height: ARTWORK_SIZE,
-    overflow: 'hidden',
+  timeRow:         { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  timeText:        { color: 'rgba(255,255,255,0.50)', fontSize: 12 },
+  controls:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  playBtn:         { width: 74, height: 74, borderRadius: 37, justifyContent: 'center', alignItems: 'center' },
+  iconWrap:        { padding: 6 },
+  repeatOneDot:    {
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#7035E0', borderRadius: 7,
+    width: 14, height: 14, justifyContent: 'center', alignItems: 'center',
   },
-  infoRow:      { flexDirection: 'row', alignItems: 'center', width: '100%' },
-  trackTitle:   { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3, marginBottom: 4 },
-  trackArtist:  { color: 'rgba(255,255,255,0.75)', fontSize: 16, fontWeight: '500', marginBottom: 2 },
-  trackAlbum:   { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
-  noticeBadge:  { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: 10 },
-  noticeText:   { color: 'rgba(255,255,255,0.75)', fontSize: 12 },
-  progressSection: { width: '100%' },
-  progressBg:   { height: 4, borderRadius: 2, width: '100%', position: 'relative' },
-  progressFill: { height: 4, borderRadius: 2 },
-  scrubDot:     {
-    position: 'absolute', top: -5, width: 14, height: 14,
-    borderRadius: 7, marginLeft: -7,
-  },
-  timeRow:      { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  timeText:     { color: 'rgba(255,255,255,0.55)', fontSize: 12 },
-  controls:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-  playBtn:      {
-    width: 72, height: 72, borderRadius: 36,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  repeatOneBadge:{
-    position: 'absolute', bottom: -4, right: -4,
-    backgroundColor: '#7035E0', borderRadius: 6, width: 12, height: 12,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  repeatOneText: { color: '#fff', fontSize: 8, fontWeight: '800' },
-  attribution:  { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8, padding: 10 },
-  attributionText:{ color: 'rgba(255,255,255,0.5)', fontSize: 11, textAlign: 'center', lineHeight: 16 },
-  phase3Notice: { backgroundColor: 'rgba(112,53,224,0.2)', borderRadius: 8, padding: 10 },
-  phase3Text:   { color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', lineHeight: 18 },
+  repeatOneText:   { color: '#fff', fontSize: 8, fontWeight: '800' },
+  secondaryRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 },
+  secondaryBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  secondaryLabel:  { color: 'rgba(255,255,255,0.50)', fontSize: 13 },
+  separatorDot:    { width: 4, height: 4, borderRadius: 2 },
+  attribution:     { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10, padding: 12, alignItems: 'center' },
+  attributionText: { color: 'rgba(255,255,255,0.55)', fontSize: 11, textAlign: 'center' },
+  attributionLicense:{ color: 'rgba(255,255,255,0.32)', fontSize: 10, marginTop: 2 },
 });

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../theme/ThemeContext';
-import { usePlaybackStore } from '../../services/audio/playbackStore';
+import { useAudio } from '../../hooks/useAudio';
 import { providerRegistry } from '../../providers/registry';
 import { TrackRow } from '../../components/ui/TrackRow';
 import { TrackRowSkeleton } from '../../components/ui/Skeleton';
@@ -48,9 +48,7 @@ export default function SearchScreen() {
 
   const debouncedQuery = useDebounce(query.trim(), 400);
 
-  const currentTrack   = usePlaybackStore(s => s.currentTrack);
-  const setCurrentTrack = usePlaybackStore(s => s.setCurrentTrack);
-  const addToQueue     = usePlaybackStore(s => s.addToQueue);
+  const { currentTrack, playTrack } = useAudio();
 
   const TAB_BOTTOM = 70 + (currentTrack ? 72 : 0) + insets.bottom;
 
@@ -81,13 +79,12 @@ export default function SearchScreen() {
     doSearch(debouncedQuery);
   }, [debouncedQuery, doSearch]);
 
-  const handleTrackPress = useCallback((track: Track) => {
+  const handleTrackPress = useCallback(async (track: Track) => {
     if (track.playbackAvailability === 'unavailable') return;
-    setCurrentTrack(track);
-    addToQueue(track);
     Keyboard.dismiss();
+    await playTrack(track);
     router.push('/player');
-  }, [setCurrentTrack, addToQueue, router]);
+  }, [playTrack, router]);
 
   const tabs: SearchTab[] = ['tracks', 'artists', 'albums'];
   const tabCounts: Record<SearchTab, number> = {

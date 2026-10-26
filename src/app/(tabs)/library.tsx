@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useAudio } from '../../hooks/useAudio';
 import { useLibraryStore } from '../../services/libraryStore';
 import { usePlaybackStore } from '../../services/audio/playbackStore';
 import { TrackRow } from '../../components/ui/TrackRow';
@@ -37,9 +38,7 @@ export default function LibraryScreen() {
     createPlaylist, deletePlaylist,
   } = useLibraryStore();
 
-  const currentTrack    = usePlaybackStore(s => s.currentTrack);
-  const setCurrentTrack = usePlaybackStore(s => s.setCurrentTrack);
-  const addToQueue      = usePlaybackStore(s => s.addToQueue);
+  const { currentTrack, playTrack } = useAudio();
 
   const TAB_BOTTOM = 70 + (currentTrack ? 72 : 0) + insets.bottom;
 
@@ -61,11 +60,10 @@ export default function LibraryScreen() {
     );
   }, [deletePlaylist, t]);
 
-  const handleTrackPress = useCallback((track: any) => {
-    setCurrentTrack(track);
-    addToQueue(track);
+  const handleTrackPress = useCallback(async (track: any) => {
+    await playTrack(track);
     router.push('/player');
-  }, [setCurrentTrack, addToQueue, router]);
+  }, [playTrack, router]);
 
   // ---- Sub-views ----
   if (view === 'liked') {

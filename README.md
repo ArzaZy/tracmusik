@@ -262,3 +262,146 @@ Kode TracMusic: MIT License
 
 Musik dari Jamendo: Creative Commons (bervariasi per lagu)
 Selalu tampilkan atribusi untuk lagu CC-BY.
+
+
+---
+
+## Phase 6 — Build & Release
+
+### Checklist sebelum build APK
+
+- [ ] Sudah punya akun Expo di https://expo.dev
+- [ ] Jamendo Client ID sudah diisi di `eas.json` (ganti REPLACE_WITH...)
+- [ ] (Opsional) Supabase URL dan Anon Key sudah diisi
+- [ ] File `icon.png` sudah ada di `assets/icons/`
+
+---
+
+### Cara build APK dari HP Android (step by step)
+
+**1. Buka GitHub Codespace**
+
+Buka repo GitHub TracMusic kamu → klik **Code** → **Codespaces** → **Create codespace**
+
+**2. Upload / sinkronisasi file proyek**
+
+Jika pertama kali: upload zip ini dan extract di Codespace terminal:
+```bash
+unzip tracmusic-final.zip -d .
+cd tracmusic
+```
+
+**3. Install dependencies**
+```bash
+npm install
+```
+
+**4. Login ke Expo**
+```bash
+npx eas-cli login
+# Masukkan email & password akun expo.dev kamu
+```
+
+**5. Konfigurasi EAS (hanya sekali)**
+```bash
+npx eas-cli build:configure
+# Pilih Android → ini otomatis isi EAS_PROJECT_ID di eas.json
+```
+
+**6. Isi credentials di eas.json**
+
+Buka `eas.json`, ganti semua `REPLACE_WITH_YOUR_CLIENT_ID` dll dengan nilai asli:
+```json
+env: {
+  EXPO_PUBLIC_JAMENDO_CLIENT_ID: abc123def456,
+  EXPO_PUBLIC_SUPABASE_URL: https://xxx.supabase.co,
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJ...
+}
+```
+
+> ⚠️ **PENTING**: Jangan commit  ke GitHub publik jika sudah berisi credentials.
+> Untuk produksi, gunakan EAS Secrets: 
+
+**7. Build APK preview (untuk dibagikan ke teman)**
+```bash
+npx eas-cli build --profile preview --platform android
+```
+
+- Build berjalan di cloud Expo (~10–20 menit)
+- Setelah selesai, kamu dapat **link download APK**
+- Download APK → kirim ke teman via WhatsApp / Google Drive
+
+**8. Install APK di Android**
+
+Di HP Android yang akan menginstall:
+1. Buka **Settings** → **Security** (atau **Privacy**)
+2. Aktifkan **Install from unknown sources** untuk browser/Files kamu
+3. Download APK → tap → Install
+
+---
+
+### Menggunakan EAS Secrets (lebih aman untuk produksi)
+
+Daripada menyimpan secrets di `eas.json`, gunakan:
+```bash
+npx eas-cli secret:create --scope project --name EXPO_PUBLIC_JAMENDO_CLIENT_ID --value abc123
+npx eas-cli secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value https://...
+npx eas-cli secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value eyJ...
+```
+
+Lalu hapus bagian `env` dari `eas.json` — EAS akan inject otomatis saat build.
+
+---
+
+### Troubleshooting build umum
+
+| Error | Solusi |
+|-------|--------|
+|  | Sudah diset ke 24 di app.config.ts |
+|  | Jalankan  lagi |
+|  | Jalankan  |
+|  | Build di cloud EAS — tidak perlu Java lokal |
+|  | Cek log di expo.dev/accounts/[user]/builds |
+| APK crash saat buka | Audio engine butuh  untuk dev testing |
+
+---
+
+### Perbedaan APK vs Play Store
+
+| | APK (preview) | Play Store (production) |
+|-|---------------|------------------------|
+| Cara install | Manual / sideload | Langsung dari Play Store |
+| Distribusi | WhatsApp, Drive, dll | Publik / kontrol akses |
+| Review Google | Tidak perlu | Wajib (1-7 hari) |
+| Update | Kirim APK baru | Auto-update via Play |
+| Biaya | Gratis | 5 sekali untuk developer account |
+| Format | .apk | .aab (EAS submit) |
+
+Untuk share ke teman → gunakan APK preview.
+Untuk rilis ke publik → daftar Google Play Console.
+
+---
+
+### Struktur file Phase 6 yang ditambahkan
+
+```
+src/
+  components/ui/
+    AnimatedSplash.tsx    ← Animasi splash screen custom
+    SpringButton.tsx      ← Tombol dengan spring animation
+    ErrorBoundary.tsx     ← Tangkap crash tanpa layar putih
+    EmptyState.tsx        ← Empty state yang konsisten
+    OfflineBanner.tsx     ← Banner offline otomatis
+  hooks/
+    useNetworkStatus.ts   ← Cek koneksi internet
+    useReducedMotion.ts   ← Hormat preferensi aksesibilitas
+
+assets/
+  icons/
+    icon.png              ← App icon 1024x1024 (purple gradient)
+    adaptive-icon.png     ← Android adaptive icon
+    splash.png            ← Splash screen
+
+babel.config.js           ← Config Babel (reanimated plugin)
+metro.config.js           ← Config Metro bundler
+```

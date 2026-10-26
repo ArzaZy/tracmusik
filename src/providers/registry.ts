@@ -1,4 +1,5 @@
 import { JamendoProvider } from './jamendo/JamendoProvider';
+import { YouTubeMusicProvider } from './youtubeMusic/YouTubeMusicProvider';
 import type { MusicProvider } from './types';
 import type { ProviderId } from '../types/music';
 import Constants from 'expo-constants';
@@ -50,6 +51,8 @@ export function initializeProviders(): void {
     );
   }
 
-  // YouTube Music companion (external links only, no audio extraction)
-  // Registered separately in Phase 5
+  // YouTube Music companion — external links + playlist import only
+  const ytCompanion = new YouTubeMusicProvider();
+  providerRegistry.register(ytCompanion);
+  console.log('[TracMusic] YouTube Music companion registered (external links only)');
 }

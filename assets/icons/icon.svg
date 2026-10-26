@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5820C9"/>
+      <stop offset="100%" style="stop-color:#100D1E"/>
+    </linearGradient>
+    <linearGradient id="note" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#C9A6FF"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <!-- Subtle grid glow -->
+  <circle cx="512" cy="512" r="380" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <circle cx="512" cy="512" r="280" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+  <!-- Music note - stem -->
+  <rect x="580" y="280" width="48" height="300" rx="24" fill="url(#note)"/>
+  <!-- Music note - flag -->
+  <path d="M628 280 Q720 320 700 400 Q680 380 628 360 Z" fill="url(#note)"/>
+  <!-- Music note - head -->
+  <ellipse cx="510" cy="575" rx="80" ry="58" fill="url(#note)" transform="rotate(-15 510 575)"/>
+  <!-- Second note stem -->
+  <rect x="390" y="330" width="40" height="260" rx="20" fill="url(#note)" opacity="0.65"/>
+  <!-- Second note head -->
+  <ellipse cx="334" cy="581" rx="66" ry="48" fill="url(#note)" opacity="0.65" transform="rotate(-15 334 581)"/>
+  <!-- "T" lettermark subtle -->
+  <text x="512" y="820" font-family="system-ui, -apple-system, sans-serif" font-size="88" font-weight="800" 
+        fill="rgba(255,255,255,0.12)" text-anchor="middle" letter-spacing="8">TRAC</text>
+</svg>

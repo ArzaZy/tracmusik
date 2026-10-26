@@ -5,7 +5,6 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Switch,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +14,8 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../localization';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
+import { useAuthStore } from '../../services/auth/AuthService';
 
 const ACCENT_PRESETS = [
   '#7035E0', // TracMusic purple (default)
@@ -31,9 +32,29 @@ export default function SettingsScreen() {
   const { theme, mode, accentColor, setMode, setAccentColor } = useTheme();
   const { t }     = useTranslation();
   const insets    = useSafeAreaInsets();
+  const router    = useRouter();
   const [lang, setLangState] = useState(i18n.language);
+  const { user, isGuest, signOut, deleteAccount } = useAuthStore();
 
   const version = Constants.expoConfig?.version ?? '1.0.0';
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Sign out of TracMusic?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', onPress: () => signOut() },
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Ini akan menghapus semua data cloud kamu secara permanen. Data lokal di HP tetap ada.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteAccount() },
+      ],
+    );
+  };
 
   const handleClearCache = () => {
     Alert.alert(
@@ -189,6 +210,50 @@ export default function SettingsScreen() {
           </View>
         </SettingGroup>
 
+        {/* Account */}
+        <SettingGroup title={t('settings.account')} theme={theme}>
+          {isGuest ? (
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.hint, { color: theme.colors.textSecondary }]}>
+                Kamu sedang menggunakan TracMusic sebagai tamu.{'\n'}
+                Masuk untuk menyinkronkan playlist dan lagu favorit ke cloud.
+              </Text>
+              <Pressable
+                onPress={() => router.push('/auth')}
+                style={[styles.accentBtn, { backgroundColor: theme.colors.accent, borderRadius: theme.radius.md }]}
+              >
+                <Text style={styles.accentBtnText}>{t('settings.signIn')} / Daftar</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              <View style={styles.accountRow}>
+                <View style={[styles.avatarCircle, { backgroundColor: theme.colors.accentLight }]}>
+                  <Text style={{ fontSize: 22 }}>👤</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.label, { color: theme.colors.textPrimary }]}>
+                    {user?.email ?? 'User'}
+                  </Text>
+                  <Text style={[styles.hint, { color: theme.colors.textTertiary }]}>
+                    Akun tersinkronisasi ☁
+                  </Text>
+                </View>
+              </View>
+              <Pressable onPress={handleSignOut} style={[styles.dangerRow, { paddingVertical: 10 }]}>
+                <Text style={{ color: theme.colors.error, fontWeight: '600', fontSize: 15 }}>
+                  🚪 {t('settings.signOut')}
+                </Text>
+              </Pressable>
+              <Pressable onPress={handleDeleteAccount}>
+                <Text style={{ color: theme.colors.textTertiary, fontSize: 12 }}>
+                  {t('settings.deleteAccount')}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </SettingGroup>
+
         {/* Privacy */}
         <SettingGroup title={t('settings.privacy')} theme={theme}>
           <Text style={[styles.hint, { color: theme.colors.textSecondary, lineHeight: 20 }]}>
@@ -283,6 +348,10 @@ const styles = StyleSheet.create({
   divider:        { height: StyleSheet.hairlineWidth, marginVertical: 8 },
   sourceName:     { fontSize: 14, fontWeight: '700' },
   sourceStatus:   { fontSize: 12 },
+  accentBtn:      { padding: 14, alignItems: 'center' },
+  accentBtnText:  { color: '#fff', fontWeight: '700', fontSize: 15 },
+  accountRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatarCircle:   { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   aboutBlock:     { alignItems: 'center', padding: 8 },
   appNameBig:     { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   versionText:    { fontSize: 13, marginTop: 4 },

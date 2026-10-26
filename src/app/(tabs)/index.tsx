@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLibraryStore } from '../../services/libraryStore';
-import { usePlaybackStore } from '../../services/audio/playbackStore';
+import { useAudio } from '../../hooks/useAudio';
 import { providerRegistry } from '../../providers/registry';
 import { CardSkeleton, TrackRowSkeleton } from '../../components/ui/Skeleton';
 import { TrackRow } from '../../components/ui/TrackRow';
@@ -37,9 +37,7 @@ export default function HomeScreen() {
   const { width }         = useWindowDimensions();
 
   const recentlyPlayed  = useLibraryStore(s => s.recentlyPlayed);
-  const currentTrack    = usePlaybackStore(s => s.currentTrack);
-  const addToQueue      = usePlaybackStore(s => s.addToQueue);
-  const setCurrentTrack = usePlaybackStore(s => s.setCurrentTrack);
+  const { currentTrack, playTrack } = useAudio();
 
   const [popularTracks, setPopularTracks] = useState<Track[]>([]);
   const [newTracks,     setNewTracks]     = useState<Track[]>([]);
@@ -82,12 +80,11 @@ export default function HomeScreen() {
     loadContent();
   }, [loadContent]);
 
-  const handleTrackPress = useCallback((track: Track) => {
+  const handleTrackPress = useCallback(async (track: Track) => {
     if (track.playbackAvailability === 'unavailable') return;
-    setCurrentTrack(track);
-    addToQueue(track);
+    await playTrack(track);
     router.push('/player');
-  }, [setCurrentTrack, addToQueue, router]);
+  }, [playTrack, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>

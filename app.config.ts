@@ -35,18 +35,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
-    'expo-font',
     [
-      'expo-av',
+      'expo-splash-screen',
       {
-        microphonePermission: false,
+        backgroundColor: '#0D0D1A',
+        image: './assets/icons/splash.png',
+        resizeMode: 'contain',
       },
     ],
+    ['expo-av', { microphonePermission: false }],
     [
-      'react-native-track-player',
+      'expo-build-properties',
       {
-        enableMusicControls: true,
-        enableCastButton: false,
+        android: {
+          compileSdkVersion: 34,
+          targetSdkVersion: 34,
+          buildToolsVersion: '34.0.0',
+        },
       },
     ],
   ],
