@@ -1,0 +1,6 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+:root{--accent:#8b5cf6;--bg:#0a0a0f}
+body{background:var(--bg);color:#fff;font-family:system-ui,sans-serif}
+.glass{background:rgba(255,255,255,.05);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08)}
+input[type=range]{accent-color:var(--accent)}
+.noscroll::-webkit-scrollbar{display:none}
