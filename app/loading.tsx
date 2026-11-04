@@ -1,0 +1,1 @@
+export default function Loading(){return(<div><div className="shimmer mb-6 h-10 w-48 rounded-xl bg-fg/10"/><div className="flex gap-4 overflow-hidden">{[...Array(5)].map((_,i)=><div key={i} className="shimmer w-[152px] shrink-0"><div className="aspect-square rounded-[14px] bg-fg/10"/><div className="mt-2 h-3 w-24 rounded bg-fg/10"/></div>)}</div></div>)}

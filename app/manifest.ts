@@ -1,0 +1,1 @@
+export default function manifest(){return{name:"TracMusic",short_name:"TracMusic",description:"Discover Music. Feel Everything.",start_url:"/",display:"standalone" as const,background_color:"#000000",theme_color:"#000000",icons:[{src:"/icon.svg",sizes:"any",type:"image/svg+xml"}]}}
