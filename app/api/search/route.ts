@@ -8,5 +8,5 @@ export async function GET(r:NextRequest){
   const k=spotifyKind(q);
   if(/open\.spotify\.com/i.test(q)&&!k)return NextResponse.json({error:"Hanya tautan lagu dan playlist Spotify yang didukung"},{status:400});
   return NextResponse.json(k==="track"?await trackFromUrl(q):k==="playlist"?await playlistFromUrl(q):await searchTracks(q,24));
- }catch{return NextResponse.json({error:"Gagal memuat"},{status:502})}
+ }catch(e:any){return NextResponse.json({error:"Gagal memuat ("+(e?.message||"error")+")"},{status:502})}
 }

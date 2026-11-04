@@ -6,7 +6,7 @@ const enc=encodeURIComponent;
 const HEAD={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Accept":"application/json, text/plain, */*","Accept-Language":"id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"};
 
 async function call(path:string,key:string,val:string,rev=900){
-  const r=await fetch(`${BASE}/${path}?${key}=${enc(val)}`,{headers:HEAD,signal:AbortSignal.timeout(15000),...(rev?{next:{revalidate:rev}}:{cache:"no-store" as const})});
+  const r=await fetch(`${BASE}/${path}?${key}=${enc(val)}`,{headers:HEAD,signal:AbortSignal.timeout(25000),...(rev?{next:{revalidate:rev}}:{cache:"no-store" as const})});
   if(!r.ok)throw new Error("api "+r.status);
   return r.json();
 }
