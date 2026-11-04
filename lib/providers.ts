@@ -59,13 +59,20 @@ function toTrack(o:any):Track|null{
 }
 function unwrap(j:any):any{
   let x=j;
-  for(let n=0;n<4;n++){
+  const skip=["artists","images","thumbnails","genres","external_urls","owner","album"];
+  for(let n=0;n<5;n++){
     if(Array.isArray(x))return x;
     if(!x||typeof x!=="object")return x;
-    if(first(x,["title","name"])&&!Array.isArray(x.tracks)&&!Array.isArray(x.items))return x; // satu lagu
-    const k=["result","results","data","tracks","items","songs","playlist"].find(k=>x[k]!=null);
-    if(!k)return x;
-    x=x[k];
+    // 1) daftar lagu di dalam objek (playlist) — cari dulu nama field umum, lalu array objek apa pun
+    const known=["tracks","items","songs","list","data","results","result","music"].find(k=>Array.isArray(x[k])&&x[k].length&&typeof x[k][0]==="object");
+    const any=known||Object.keys(x).find(k=>!skip.includes(k)&&Array.isArray(x[k])&&x[k].length&&typeof x[k][0]==="object"&&first(x[k][0],["title","name","judul","trackName"]));
+    if(any){x=x[any];continue}
+    // 2) satu lagu
+    if(first(x,["title","name","judul","trackName","track_name","song"]))return x;
+    // 3) pembungkus {status, result:{...}}
+    const w=["result","results","data","playlist","track"].find(k=>x[k]&&typeof x[k]==="object");
+    if(!w)return x;
+    x=x[w];
   }
   return x;
 }
